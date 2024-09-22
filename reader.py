@@ -34,7 +34,13 @@ class BpHeaderReader(BpReader):
         scale_y = reader.next_float()
         scale_z = reader.next_float()
 
-        return BpHeader(type_path, root, instance_name, need_transform, rot_x, rot_y, rot_z, rot_w, pos_x, pos_y, pos_z, scale_x, scale_y, scale_z)
+        placed_in_level = reader.next_int32() == 1
+
+        uk1 = reader.next_int32()
+        uk2 = reader.next_int32()
+        uk3 = reader.next_int32()
+
+        return BpHeader(type_path, root, instance_name, need_transform, rot_x, rot_y, rot_z, rot_w, pos_x, pos_y, pos_z, scale_x, scale_y, scale_z, placed_in_level, uk1, uk2, uk3)
 
     def write(self, obj: BpHeader, writer: BufferWriter):
         writer.next_string(obj.type_path)
@@ -190,6 +196,9 @@ class BpPropertiesReader(BpReader):
 
 class BpObjectReader(BpReader):
     def read(self, reader: BufferReader) -> BpObject:
+        obj_type = reader.next_int32()
+        assert obj_type == 1, f"Expected object type 1, got {obj_type}"
+
         header = BpHeaderReader().read(reader)
         parent_root = reader.next_string()
         parent_object_name = reader.next_string()

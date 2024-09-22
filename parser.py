@@ -2,6 +2,7 @@ import json
 import zlib
 
 from BufferReader import BufferReader
+from reader import BpObjectReader
 
 # open file
 path = r"Z:\Docs\Satisfactory\Blueprint Analysis\foundation_raw_offset1.sbp"
@@ -106,141 +107,9 @@ object_count = body_reader.next_int32()
 
 print("\nMetadata =============================================================================")
 
-
-def parse_object_property(reader: BufferReader, prop_name: str):
-    size = reader.next_int32()
-    reader.skip_forward(5)  # skip 5 null bytes
-
-    return {"name": prop_name, "levelName": reader.next_string(), "pathName": reader.next_string()}
-
-
-def parse_struct_property(reader: BufferReader, prop_name: str):
-    prop = {"name": prop_name}
-    size = reader.next_int32()
-    reader.skip_forward(4)  # skip 4 null bytes
-    prop["structType"] = reader.next_string()
-    prop["values"] = {}
-
-    # skip padding
-    reader.skip_forward(8 + 8 + 1)  # offset is 2 longs, 1 byte
-
-    if prop["structType"] == "Color":
-        prop["values"]["r"] = reader.next_byte()
-        prop["values"]["g"] = reader.next_byte()
-        prop["values"]["b"] = reader.next_byte()
-        prop["values"]["a"] = reader.next_byte()
-
-    elif prop["structType"] == "LinearColor":
-        prop["values"]["r"] = reader.next_float()
-        prop["values"]["g"] = reader.next_float()
-        prop["values"]["b"] = reader.next_float()
-        prop["values"]["a"] = reader.next_float()
-
-    elif prop["structType"] == "Vector" or prop["structType"] == "Rotator":
-        prop["values"]["x"] = reader.next_float()
-        prop["values"]["y"] = reader.next_float()
-        prop["values"]["z"] = reader.next_float()
-
-    elif prop["structType"] == "Vector2D":
-        prop["values"]["x"] = reader.next_float()
-        prop["values"]["y"] = reader.next_float()
-
-    elif prop["structType"] == "Vector4" or prop["structType"] == "Quat":
-        prop["values"]["x"] = reader.next_float()
-        prop["values"]["y"] = reader.next_float()
-        prop["values"]["z"] = reader.next_float()
-        prop["values"]["w"] = reader.next_float()
-
-    # parse as generic struct type (=> nested properties)
-    prop["values"]["value"] = []
-
-    while True:
-        sub_prop = parse_property(reader)
-
-        if sub_prop is None:
-            break
-
-        prop["values"]["value"].append(sub_prop)
-
-    return prop
-
-
-def parse_property(reader: BufferReader) -> dict or None:
-    prop_name = reader.next_string()
-    if prop_name == "None":
-        return None
-
-    prop_type = reader.next_string()
-
-    prop = None
-
-    if prop_type == "ObjectProperty":
-        prop = parse_object_property(reader, prop_name)
-    elif prop_type == "StructProperty":
-        prop = parse_struct_property(reader, prop_name)
-
-    else:
-        raise Exception(f"Unknown property type: {prop_type}")
-
-    prop["type"] = prop_type
-
-    return prop
-
-
-def parse_properties(reader):
-    properties = []
-    was_none = False
-
-    while not was_none:
-        prop = parse_property(reader)
-        if prop is None:
-            if was_none:
-                break
-            was_none = True
-        else:
-            properties.append(prop)
-            was_none = False
-
-    return properties
-
-
 for i in range(object_count):
-    obj_type = body_reader.next_int32()
-    obj_header = {}
+    obj = BpObjectReader().read(body_reader)
 
-    obj = {"header": obj_header}
+    print(obj.dump_to_json())
 
-    if obj_type == 1:
-        obj_header["typePath"] = body_reader.next_string()
-        obj_header["root"] = body_reader.next_string()
-        obj_header["instanceName"] = body_reader.next_string()
-        obj_header["needTransform"] = body_reader.next_int32() == 1
-        obj_header["rotX"] = body_reader.next_float()
-        obj_header["rotY"] = body_reader.next_float()
-        obj_header["rotZ"] = body_reader.next_float()
-        obj_header["rotW"] = body_reader.next_float()
-
-        obj_header["posX"] = body_reader.next_float()
-        obj_header["posY"] = body_reader.next_float()
-        obj_header["posZ"] = body_reader.next_float()
-
-        obj_header["scaleX"] = body_reader.next_float()
-        obj_header["scaleY"] = body_reader.next_float()
-        obj_header["scaleZ"] = body_reader.next_float()
-
-        obj_header["placedInLevel"] = body_reader.next_string() == 1
-
-        uk1 = body_reader.next_int32()
-        uk2 = body_reader.next_int32()
-        uk3 = body_reader.next_int32()
-
-        obj["parentRoot"] = body_reader.next_string()
-        obj["parentObjectName"] = body_reader.next_string()
-
-        body_reader.skip_forward(4)  # skip 4 null bytes
-
-        props = parse_properties(body_reader)
-        obj["properties"] = props
-
-        print(json.dumps(obj, indent=4))
 

@@ -23,6 +23,12 @@ class BpHeader:
     scale_y: float
     scale_z: float
 
+    placed_in_level: str
+
+    uk1: int
+    uk2: int
+    uk3: int
+
 
 @dataclass
 class TypedData:
