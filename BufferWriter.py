@@ -24,7 +24,7 @@ class BufferWriter:
                 nonlocal written
                 if not written:
                     length = data_offset - (offset + 4)
-                    val = length.to_bytes(4, byteorder='little')
+                    val = length.to_bytes(4, byteorder='little', signed=True)
                     self.buffer[offset:offset+4] = val
                     written = True
 
@@ -40,11 +40,11 @@ class BufferWriter:
         self.buffer.extend(val)
 
     def next_int32(self, v: int):
-        val = v.to_bytes(4, byteorder='little')
+        val = v.to_bytes(4, byteorder='little', signed=True)
         self.buffer.extend(val)
 
     def next_int64(self, v: int):
-        val = v.to_bytes(8, byteorder='little')
+        val = v.to_bytes(8, byteorder='little', signed=True)
         self.buffer.extend(val)
 
     def next_string(self, v: str):
@@ -52,6 +52,9 @@ class BufferWriter:
         val = v.encode("utf-8")
         self.next_int32(len(val))
         self.buffer.extend(val)
+
+    def next_guid(self, guid: bytes):  # 16 byte guid
+        self.buffer.extend(guid)
 
     def next_bytes(self, b: bytes):
         self.buffer.extend(b)

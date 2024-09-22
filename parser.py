@@ -66,7 +66,7 @@ content_reader.skip_backwards(4)
 # For now, assuming compression with zlib.
 
 signature = content_reader.next_int32()
-assert signature == 2653586369, f"Invalid signature: {signature}"
+assert signature == -1641380927, f"Invalid signature: {signature}"
 
 archive_header = content_reader.next_int32()
 assert archive_header == 0x22222222, f"Invalid archive header: {archive_header}"

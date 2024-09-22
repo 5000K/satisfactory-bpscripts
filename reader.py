@@ -2,7 +2,7 @@ from BufferReader import BufferReader
 from BufferWriter import BufferWriter
 from structure import BpHeader, BpObject, BpProperty, BpObjectProperty, BpStructProperty, TypedData, BpByteProperty, \
     BpActorHeader, BpComponentHeader, BpObjectReference, BpFloatProperty, BpIntProperty, BpInt64Property, \
-    BpEnumProperty, BpBoolProperty
+    BpEnumProperty, BpBoolProperty, BpArrayProperty, BpStructArrayProperty, BpValueArrayProperty
 
 
 class BpReader:
@@ -147,6 +147,8 @@ class BpPropertyReader(BpReader):
         else:
             value = reader.next_string()
 
+        reader.print_offset_hex()
+
         return BpByteProperty(name, prop_type, byte_type, value)
 
     def _write_byte_property(self, obj: BpByteProperty, writer: BufferWriter):
@@ -194,6 +196,86 @@ class BpPropertyReader(BpReader):
 
         write_size()
 
+    def _read_array_property(self, reader: BufferReader) -> BpArrayProperty:
+        name = reader.next_string()
+        prop_type = reader.next_string()
+
+        size = reader.next_int32()
+
+        reader.skip_forward(4)
+
+        array_type = reader.next_string()
+
+        reader.skip_forward(1)
+
+        array_size = reader.next_int32()
+
+        if array_type == "StructProperty":
+            # TODO: Implement.
+            raise Exception(f"Unimplemented array type: {array_type}")
+
+        elif array_type == "ByteProperty":
+            data = []
+            if name == "mFogOfWarRawData":
+                # only save the 3rd byte of each 4 bytes
+                for i in range(array_size / 4):
+                    reader.next_int32()
+                    reader.next_int32()
+                    reader.next_int32()
+                    data.append(reader.next_byte())
+            else:
+                for i in range(array_size):
+                    data.append(reader.next_byte())
+
+            return BpValueArrayProperty(name, prop_type, array_type, data)
+
+        elif array_type == "BoolProperty":
+            data = []
+            for i in range(array_size):
+                data.append(reader.next_byte() == 1)
+            return BpValueArrayProperty(name, prop_type, array_type, data)
+
+        elif array_type == "IntProperty":
+            data = []
+            for i in range(array_size):
+                data.append(reader.next_int32())
+            return BpValueArrayProperty(name, prop_type, array_type, data)
+
+        elif array_type == "Int64Property":
+            data = []
+            for i in range(array_size):
+                data.append(reader.next_int64())
+            return BpValueArrayProperty(name, prop_type, array_type, data)
+
+        elif array_type == "FloatProperty":
+            data = []
+            for i in range(array_size):
+                data.append(reader.next_float())
+            return BpValueArrayProperty(name, prop_type, array_type, data)
+
+        elif array_type == "EnumProperty":
+            data = []
+            for i in range(array_size):
+                data.append(reader.next_string())
+            return BpValueArrayProperty(name, prop_type, array_type, data)
+
+        elif array_type == "StrProperty":
+            data = []
+            for i in range(array_size):
+                data.append(reader.next_string())
+            return BpValueArrayProperty(name, prop_type, array_type, data)
+
+        elif array_type == "ObjectProperty" or array_type == "InterfaceProperty":
+            data = []
+            for i in range(array_size):
+                level_name = reader.next_string()
+                path_name = reader.next_string()
+                data.append({"level_name": level_name, "path_name": path_name})
+            return BpValueArrayProperty(name, prop_type, array_type, data)
+
+        else:
+            raise Exception(f"Unimplemented array type: {array_type}")
+
     def _read_struct_property(self, reader: BufferReader) -> BpStructProperty:
         name = reader.next_string()
         prop_type = reader.next_string()
@@ -234,6 +316,9 @@ class BpPropertyReader(BpReader):
             data["y"] = reader.next_float()
             data["z"] = reader.next_float()
             data["w"] = reader.next_float()
+
+        elif struct_type == "Guid":
+            data["guid"] = reader.next_guid()
 
         else:
             data["values"] = []
@@ -331,7 +416,6 @@ class BpPropertyReader(BpReader):
 
         write_size()
 
-
     def _read_float_property(self, reader: BufferReader) -> BpFloatProperty:
         name = reader.next_string()
         prop_type = reader.next_string()
@@ -403,6 +487,7 @@ class BpPropertyReader(BpReader):
     def read(self, reader: BufferReader) -> BpProperty or None:
         jump_back = reader.set_jump_point()
 
+        print(f"Reading property at offset 0x{reader.offset:02X}")
         name = reader.next_string()
 
         if name == "None":
@@ -410,10 +495,15 @@ class BpPropertyReader(BpReader):
 
         prop_type = reader.next_string()
 
+        print(f"Reading property {name} ({prop_type})")
+
         jump_back()  # property readers will read the name and type again for completeness
 
         if prop_type == "StructProperty":
             return self._read_struct_property(reader)
+
+        if prop_type == "ArrayProperty":
+            return self._read_array_property(reader)
 
         if prop_type == "ObjectProperty":
             return self._read_object_property(reader)
@@ -475,19 +565,21 @@ class BpBodyReader(BpReader):
         for i in range(entity_count):
             obj = objects[i]
 
-            print(f"Reading object {i+1}/{entity_count} (type: {"Actor" if obj.header.type_flag == 1 else "Component"})")
+            print(
+                f"Reading object {i + 1}/{entity_count} (type: {"Actor" if obj.header.type_flag == 1 else "Component"})")
             reader.print_offset_hex()
 
             size = reader.next_int32()
             print(f"Size: {size}")
 
-            obj.parent_root = reader.next_string()
-            obj.parent_object_name = reader.next_string()
+            if obj.header.type_flag == 1:
+                obj.parent_root = reader.next_string()
+                obj.parent_object_name = reader.next_string()
 
-            reference_count = reader.next_int32()
+                reference_count = reader.next_int32()
 
-            for j in range(reference_count):
-                obj.references = BpObjectReferenceReader().read(reader)
+                for j in range(reference_count):
+                    obj.references = BpObjectReferenceReader().read(reader)
 
             obj.properties = BpPropertiesReader().read(reader)
             uk3 = reader.next_int32()

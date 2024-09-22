@@ -20,12 +20,12 @@ class BufferReader:
         return val[0]
 
     def next_int32(self):
-        value = int.from_bytes(self.buffer[self.offset:self.offset+4], byteorder='little')
+        value = int.from_bytes(self.buffer[self.offset:self.offset+4], byteorder='little', signed=True)
         self.offset += 4
         return value
 
     def next_int64(self):
-        value = int.from_bytes(self.buffer[self.offset:self.offset+8], byteorder='little')
+        value = int.from_bytes(self.buffer[self.offset:self.offset+8], byteorder='little', signed=True)
         self.offset += 8
         return value
 
@@ -35,6 +35,11 @@ class BufferReader:
         value: str = self.buffer[self.offset:self.offset+length].decode("utf-8")
         self.offset += length
         return value.strip("\x00")
+
+    def next_guid(self):  # 16 byte guid
+        value = self.buffer[self.offset:self.offset+16]
+        self.offset += 16
+        return value
 
     def next_bytes(self, length):
         value = self.buffer[self.offset:self.offset+length]

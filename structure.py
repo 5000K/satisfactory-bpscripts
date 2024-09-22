@@ -100,6 +100,28 @@ class BpStructProperty(BpProperty):
 
 
 @dataclass
+class BpArrayElement:
+    name: str
+    prop_type: str
+
+
+@dataclass
+class BpArrayProperty(BpProperty):
+    array_type: str
+
+
+@dataclass
+class BpStructArrayProperty(BpArrayProperty):
+    guid: str
+    data: list[BpStructProperty]
+
+
+@dataclass
+class BpValueArrayProperty(BpArrayProperty):
+    data: list[any]
+
+
+@dataclass
 class BpObject:
     header: BpHeader
     parent_root: str
