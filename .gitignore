@@ -6,3 +6,5 @@ venv_/
 .idea/
 
 *.bin
+
+__pycache__/
