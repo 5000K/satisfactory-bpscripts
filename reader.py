@@ -1,7 +1,8 @@
 from BufferReader import BufferReader
 from BufferWriter import BufferWriter
 from structure import BpHeader, BpObject, BpProperty, BpObjectProperty, BpStructProperty, TypedData, BpByteProperty, \
-    BpActorHeader, BpComponentHeader, BpObjectReference
+    BpActorHeader, BpComponentHeader, BpObjectReference, BpFloatProperty, BpIntProperty, BpInt64Property, \
+    BpEnumProperty, BpBoolProperty
 
 
 class BpReader:
@@ -112,6 +113,24 @@ class BpObjectReferenceReader(BpReader):
 
 
 class BpPropertyReader(BpReader):
+    def _read_bool_property(self, reader: BufferReader) -> BpBoolProperty:
+        name = reader.next_string()
+        prop_type = reader.next_string()
+
+        reader.skip_forward(8)
+        value = reader.next_byte() == 1
+        reader.skip_forward(1)
+
+        return BpBoolProperty(name, prop_type, value)
+
+    def _write_bool_property(self, obj: BpBoolProperty, writer: BufferWriter):
+        writer.next_string(obj.name)
+        writer.next_string(obj.prop_type)
+
+        writer.next_bytes(b"\x00" * 8)
+        writer.next_byte(1 if obj.value else 0)
+        writer.next_bytes(b"\x00")
+
     def _read_byte_property(self, reader: BufferReader) -> BpByteProperty:
         name = reader.next_string()
         prop_type = reader.next_string()
@@ -133,12 +152,14 @@ class BpPropertyReader(BpReader):
     def _write_byte_property(self, obj: BpByteProperty, writer: BufferWriter):
         writer.next_string(obj.name)
         writer.next_string(obj.prop_type)
-        write_size = writer.reserve_write_length()
+        set_padding = writer.reserve_write_length_padded()
 
         writer.next_bytes(b"\x00" * 4)
 
         writer.next_string(obj.type)
         writer.next_bytes(b"\x00")
+
+        write_size = set_padding()
 
         if obj.type == "None":
             writer.next_byte(obj.value)
@@ -162,9 +183,11 @@ class BpPropertyReader(BpReader):
     def _write_object_property(self, obj: BpObjectProperty, writer: BufferWriter):
         writer.next_string(obj.name)
         writer.next_string(obj.prop_type)
-        write_size = writer.reserve_write_length()
+        set_padding = writer.reserve_write_length_padded()
 
         writer.next_bytes(b"\x00" * 5)
+
+        write_size = set_padding()
 
         writer.next_string(obj.level_name)
         writer.next_string(obj.path_name)
@@ -233,11 +256,15 @@ class BpPropertyReader(BpReader):
     def _write_struct_property(self, obj: BpStructProperty, writer: BufferWriter):
         writer.next_string(obj.name)
         writer.next_string(obj.prop_type)
-        write_size = writer.reserve_write_length()
+        set_padding = writer.reserve_write_length_padded()
 
         writer.next_bytes(b"\x00" * 4)
 
         writer.next_string(obj.struct_type)
+
+        writer.next_bytes(b"\x00" * (8 + 8 + 1))  # padding (2 longs, 1 byte)
+
+        write_size = set_padding()
 
         if obj.is_typed_data:
             if obj.struct_type == "Color":
@@ -273,6 +300,106 @@ class BpPropertyReader(BpReader):
 
         write_size()
 
+    def _read_enum_property(self, reader: BufferReader) -> BpEnumProperty:
+        name = reader.next_string()
+        prop_type = reader.next_string()
+
+        size = reader.next_int32()
+        reader.skip_forward(4)
+
+        enum_type = reader.next_string()
+
+        reader.skip_forward(1)
+
+        value = reader.next_string()
+
+        return BpEnumProperty(name, prop_type, enum_type, value)
+
+    def _write_enum_property(self, obj: BpEnumProperty, writer: BufferWriter):
+        writer.next_string(obj.name)
+        writer.next_string(obj.prop_type)
+        set_padding = writer.reserve_write_length_padded()
+
+        writer.next_bytes(b"\x00" * 4)
+
+        writer.next_string(obj.enum_type)
+        writer.next_bytes(b"\x00")
+
+        write_size = set_padding()
+
+        writer.next_string(obj.value)
+
+        write_size()
+
+
+    def _read_float_property(self, reader: BufferReader) -> BpFloatProperty:
+        name = reader.next_string()
+        prop_type = reader.next_string()
+
+        size = reader.next_int32()
+
+        assert size == 4, f"Unimplemented float property size: {size}"
+
+        reader.skip_forward(4 + 1)
+
+        value = reader.next_float()
+
+        return BpFloatProperty(name, prop_type, value)
+
+    def _write_float_property(self, obj: BpFloatProperty, writer: BufferWriter):
+        writer.next_string(obj.name)
+        writer.next_string(obj.prop_type)
+        writer.next_int32(4)
+
+        writer.next_bytes(b"\x00" * 5)
+
+        writer.next_float(obj.value)
+
+    def _read_int_property(self, reader: BufferReader) -> BpIntProperty:
+        name = reader.next_string()
+        prop_type = reader.next_string()
+
+        size = reader.next_int32()
+
+        assert size == 4, f"Unimplemented int property size: {size}"
+
+        reader.skip_forward(4 + 1)
+
+        value = reader.next_int32()
+
+        return BpIntProperty(name, prop_type, value)
+
+    def _write_int_property(self, obj: BpIntProperty, writer: BufferWriter):
+        writer.next_string(obj.name)
+        writer.next_string(obj.prop_type)
+        writer.next_int32(4)
+
+        writer.next_bytes(b"\x00" * 5)
+
+        writer.next_int32(obj.value)
+
+    def _read_int_64_property(self, reader: BufferReader) -> BpInt64Property:
+        name = reader.next_string()
+        prop_type = reader.next_string()
+
+        size = reader.next_int32()
+
+        assert size == 8, f"Unimplemented int64 property size: {size}"
+
+        reader.skip_forward(4 + 1)
+
+        value = reader.next_int64()
+
+        return BpInt64Property(name, prop_type, value)
+
+    def _write_int_64_property(self, obj: BpInt64Property, writer: BufferWriter):
+        writer.next_string(obj.name)
+        writer.next_string(obj.prop_type)
+        writer.next_int32(8)
+
+        writer.next_bytes(b"\x00" * 5)
+        writer.next_int64(obj.value)
+
     def read(self, reader: BufferReader) -> BpProperty or None:
         jump_back = reader.set_jump_point()
 
@@ -294,6 +421,10 @@ class BpPropertyReader(BpReader):
         if prop_type == "ByteProperty":
             return self._read_byte_property(reader)
 
+        if prop_type == "FloatProperty":
+            return self._read_float_property(reader)
+
+        reader.print_offset_hex()
         raise Exception(f"Unknown property type: {prop_type}")
 
     def write(self, obj: BpProperty or None, writer: BufferWriter):
@@ -335,16 +466,16 @@ class BpBodyReader(BpReader):
             obj = BpObject(header, "", "", [], [])
             objects.append(obj)
 
-        uk1 = reader.next_int32()
+        uk1 = reader.next_int32()  # probably the total property data length?
 
-        print(f"UK1: {uk1}")
+        print(f"UK1: {uk1} (Property Data Length?)")
 
         entity_count = reader.next_int32()
 
         for i in range(entity_count):
             obj = objects[i]
 
-            print(f"Reading object {i+1}/{entity_count} (type: {obj.header.instance_name})")
+            print(f"Reading object {i+1}/{entity_count} (type: {"Actor" if obj.header.type_flag == 1 else "Component"})")
             reader.print_offset_hex()
 
             size = reader.next_int32()

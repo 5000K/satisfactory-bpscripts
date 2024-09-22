@@ -55,9 +55,35 @@ class BpProperty:
 
 
 @dataclass
+class BpBoolProperty(BpProperty):
+    value: bool
+
+
+@dataclass
 class BpByteProperty(BpProperty):
     type: str
     value: str or int
+
+
+@dataclass
+class BpEnumProperty(BpProperty):
+    enum_type: str
+    value: str
+
+
+@dataclass
+class BpFloatProperty(BpProperty):
+    value: float
+
+
+@dataclass
+class BpIntProperty(BpProperty):
+    value: int
+
+
+@dataclass
+class BpInt64Property(BpProperty):
+    value: int
 
 
 @dataclass

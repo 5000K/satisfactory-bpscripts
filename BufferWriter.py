@@ -6,26 +6,29 @@ class BufferWriter:
     def __init__(self):
         self.buffer = bytearray()
 
-    def reserve_write_length(self) -> Callable[[], None]:
+    def reserve_write_length_padded(self) -> Callable[[], callable]:
         """Reserve space for the length of a property that will be written later.
 
-        :return: A function that will write the length of the property to the reserved space. Call this function after fully writing the property."""
+        Assumes the property might be written with a padding, only measuring after the padding.
+        :return: A function that will write the length of the property to the reserved space.
+        """
 
         offset = len(self.buffer)
         self.buffer.extend(b"\x00" * 4)
         written = False
 
         def inner():
-            nonlocal written
+            data_offset = len(self.buffer)
 
-            if written:
-                return
+            def write():
+                nonlocal written
+                if not written:
+                    length = data_offset - (offset + 4)
+                    val = length.to_bytes(4, byteorder='little')
+                    self.buffer[offset:offset+4] = val
+                    written = True
 
-            written = True
-
-            length = len(self.buffer) - offset - 4
-            val = length.to_bytes(4, byteorder='little')
-            self.buffer[offset:offset+4] = val
+            return write
 
         return inner
 
