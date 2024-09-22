@@ -2,10 +2,10 @@ import json
 import zlib
 
 from BufferReader import BufferReader
-from reader import BpObjectReader
+from reader import BpBodyReader
 
 # open file
-path = r"Z:\Docs\Satisfactory\Blueprint Analysis\foundation_raw_offset1.sbp"
+path = r"Z:\Docs\Satisfactory\Blueprint Analysis\foundation_concrete+normal.sbp"
 
 # open file
 with open(path, "rb") as f:
@@ -103,13 +103,12 @@ actual_body_size = body_reader.next_int32()
 assert actual_body_size <= len(decompressed), f"Invalid body size: {actual_body_size} != {len(decompressed)}"
 
 unknown_field = body_reader.next_int32()
-object_count = body_reader.next_int32()
 
-print("\nMetadata =============================================================================")
+# read objects
+objects = BpBodyReader().read(body_reader)
 
-for i in range(object_count):
-    obj = BpObjectReader().read(body_reader)
+print("\nBody Data ============================================================================")
 
+# dump to json
+for obj in objects:
     print(obj.dump_to_json())
-
-

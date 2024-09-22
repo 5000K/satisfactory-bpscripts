@@ -25,10 +25,6 @@ class BpHeader:
 
     placed_in_level: str
 
-    uk1: int
-    uk2: int
-    uk3: int
-
 
 @dataclass
 class TypedData:
@@ -40,6 +36,12 @@ class TypedData:
 class BpProperty:
     name: str
     prop_type: str
+
+
+@dataclass
+class BpByteProperty(BpProperty):
+    type: str
+    value: str or int
 
 
 @dataclass

@@ -6,6 +6,9 @@ class BufferReader:
         self.buffer = buffer
         self.offset = 0
 
+    def print_offset_hex(self):
+        print(f"Offset: {self.offset} (0x{self.offset:02X})")
+
     def next_byte(self):
         byte = self.buffer[self.offset]
         self.offset += 1

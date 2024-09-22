@@ -1,6 +1,6 @@
 from BufferReader import BufferReader
 from BufferWriter import BufferWriter
-from structure import BpHeader, BpObject, BpProperty, BpObjectProperty, BpStructProperty, TypedData
+from structure import BpHeader, BpObject, BpProperty, BpObjectProperty, BpStructProperty, TypedData, BpByteProperty
 
 
 class BpReader:
@@ -16,6 +16,8 @@ class BpReader:
 
 class BpHeaderReader(BpReader):
     def read(self, reader: BufferReader) -> BpHeader:
+        uk1 = reader.next_int32()
+
         type_path = reader.next_string()
         root = reader.next_string()
         instance_name = reader.next_string()
@@ -36,11 +38,7 @@ class BpHeaderReader(BpReader):
 
         placed_in_level = reader.next_int32() == 1
 
-        uk1 = reader.next_int32()
-        uk2 = reader.next_int32()
-        uk3 = reader.next_int32()
-
-        return BpHeader(type_path, root, instance_name, need_transform, rot_x, rot_y, rot_z, rot_w, pos_x, pos_y, pos_z, scale_x, scale_y, scale_z, placed_in_level, uk1, uk2, uk3)
+        return BpHeader(type_path, root, instance_name, need_transform, rot_x, rot_y, rot_z, rot_w, pos_x, pos_y, pos_z, scale_x, scale_y, scale_z, placed_in_level)
 
     def write(self, obj: BpHeader, writer: BufferWriter):
         writer.next_string(obj.type_path)
@@ -63,6 +61,41 @@ class BpHeaderReader(BpReader):
 
 
 class BpPropertyReader(BpReader):
+    def _read_byte_property(self, reader: BufferReader) -> BpByteProperty:
+        name = reader.next_string()
+        prop_type = reader.next_string()
+
+        size = reader.next_int32()
+        reader.skip_forward(4)  # skip 4 null bytes
+
+        byte_type = reader.next_string()
+
+        reader.skip_forward(1)
+
+        if byte_type == "None":
+            value = reader.next_byte()
+        else:
+            value = reader.next_string()
+
+        return BpByteProperty(name, prop_type, byte_type, value)
+
+    def _write_byte_property(self, obj: BpByteProperty, writer: BufferWriter):
+        writer.next_string(obj.name)
+        writer.next_string(obj.prop_type)
+        write_size = writer.reserve_write_length()
+
+        writer.next_bytes(b"\x00" * 4)
+
+        writer.next_string(obj.type)
+        writer.next_bytes(b"\x00")
+
+        if obj.type == "None":
+            writer.next_byte(obj.value)
+        else:
+            writer.next_string(obj.value)
+
+        write_size()
+
     def _read_object_property(self, reader: BufferReader) -> BpObjectProperty:
         name = reader.next_string()
         prop_type = reader.next_string()
@@ -146,6 +179,49 @@ class BpPropertyReader(BpReader):
 
         return BpStructProperty(name, prop_type, struct_type, is_typed_data, data)
 
+    def _write_struct_property(self, obj: BpStructProperty, writer: BufferWriter):
+        writer.next_string(obj.name)
+        writer.next_string(obj.prop_type)
+        write_size = writer.reserve_write_length()
+
+        writer.next_bytes(b"\x00" * 4)
+
+        writer.next_string(obj.struct_type)
+
+        if obj.is_typed_data:
+            if obj.struct_type == "Color":
+                writer.next_byte(obj.data["r"])
+                writer.next_byte(obj.data["g"])
+                writer.next_byte(obj.data["b"])
+                writer.next_byte(obj.data["a"])
+
+            elif obj.struct_type == "LinearColor":
+                writer.next_float(obj.data["r"])
+                writer.next_float(obj.data["g"])
+                writer.next_float(obj.data["b"])
+                writer.next_float(obj.data["a"])
+
+            elif obj.struct_type == "Vector" or obj.struct_type == "Rotator":
+                writer.next_float(obj.data["x"])
+                writer.next_float(obj.data["y"])
+                writer.next_float(obj.data["z"])
+
+            elif obj.struct_type == "Vector2D":
+                writer.next_float(obj.data["x"])
+                writer.next_float(obj.data["y"])
+
+            elif obj.struct_type == "Vector4" or obj.struct_type == "Quat":
+                writer.next_float(obj.data["x"])
+                writer.next_float(obj.data["y"])
+                writer.next_float(obj.data["z"])
+                writer.next_float(obj.data["w"])
+
+        else:
+            for sub_prop in obj.data:
+                BpPropertyReader().write(sub_prop, writer)
+
+        write_size()
+
     def read(self, reader: BufferReader) -> BpProperty or None:
         jump_back = reader.set_jump_point()
 
@@ -164,13 +240,15 @@ class BpPropertyReader(BpReader):
         if prop_type == "ObjectProperty":
             return self._read_object_property(reader)
 
+        if prop_type == "ByteProperty":
+            return self._read_byte_property(reader)
+
+        raise Exception(f"Unknown property type: {prop_type}")
+
     def write(self, obj: BpProperty or None, writer: BufferWriter):
         if obj is None:
             writer.next_string("None")
             return
-
-        writer.next_string(obj.name)
-        writer.next_string(obj.prop_type)
 
         if isinstance(obj, BpObjectProperty):
             self._write_object_property(obj, writer)
@@ -194,21 +272,40 @@ class BpPropertiesReader(BpReader):
         pass
 
 
-class BpObjectReader(BpReader):
-    def read(self, reader: BufferReader) -> BpObject:
-        obj_type = reader.next_int32()
-        assert obj_type == 1, f"Expected object type 1, got {obj_type}"
+class BpBodyReader(BpReader):
+    def read(self, reader: BufferReader) -> list[BpObject]:
+        objects = []
 
-        header = BpHeaderReader().read(reader)
-        parent_root = reader.next_string()
-        parent_object_name = reader.next_string()
+        object_count = reader.next_int32()
 
-        reader.skip_forward(4)
+        for i in range(object_count):
+            header = BpHeaderReader().read(reader)
+            obj = BpObject(header, "", "", [])
+            objects.append(obj)
 
-        properties = BpPropertiesReader().read(reader)
+        uk1 = reader.next_int32()
+        uk2 = reader.next_int32()
 
-        return BpObject(header, parent_root, parent_object_name, properties)
+        for i in range(object_count):
+            print(f"Reading object {i}")
+            reader.print_offset_hex()
 
-    def write(self, obj: BpObject, writer: BufferWriter):
+            obj = objects[i]
+
+            size = reader.next_int32()
+
+            obj.parent_root = reader.next_string()
+            obj.parent_object_name = reader.next_string()
+
+            reader.skip_forward(4)  # skip 4 null bytes
+            reader.print_offset_hex()
+
+            obj.properties = BpPropertiesReader().read(reader)
+            reader.skip_forward(4)
+
+            objects[i] = obj
+
+        return objects
+
+    def write(self, obj: list[BpObject], writer: BufferWriter):
         pass
-
