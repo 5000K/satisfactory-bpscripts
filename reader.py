@@ -1,6 +1,7 @@
 from BufferReader import BufferReader
 from BufferWriter import BufferWriter
-from structure import BpHeader, BpObject, BpProperty, BpObjectProperty, BpStructProperty, TypedData, BpByteProperty
+from structure import BpHeader, BpObject, BpProperty, BpObjectProperty, BpStructProperty, TypedData, BpByteProperty, \
+    BpActorHeader, BpComponentHeader, BpObjectReference
 
 
 class BpReader:
@@ -15,9 +16,7 @@ class BpReader:
 
 
 class BpHeaderReader(BpReader):
-    def read(self, reader: BufferReader) -> BpHeader:
-        uk1 = reader.next_int32()
-
+    def _read_actor_header(self, reader: BufferReader) -> BpActorHeader:
         type_path = reader.next_string()
         root = reader.next_string()
         instance_name = reader.next_string()
@@ -38,9 +37,13 @@ class BpHeaderReader(BpReader):
 
         placed_in_level = reader.next_int32() == 1
 
-        return BpHeader(type_path, root, instance_name, need_transform, rot_x, rot_y, rot_z, rot_w, pos_x, pos_y, pos_z, scale_x, scale_y, scale_z, placed_in_level)
+        return BpActorHeader(1,  # type_flag
+                             type_path, root, instance_name, need_transform, rot_x, rot_y, rot_z, rot_w, pos_x, pos_y,
+                             pos_z,
+                             scale_x, scale_y, scale_z, placed_in_level)
 
-    def write(self, obj: BpHeader, writer: BufferWriter):
+    def _write_actor_header(self, obj: BpActorHeader, writer: BufferWriter):
+        writer.next_int32(obj.type_flag)
         writer.next_string(obj.type_path)
         writer.next_string(obj.root)
         writer.next_string(obj.instance_name)
@@ -58,6 +61,54 @@ class BpHeaderReader(BpReader):
         writer.next_float(obj.scale_x)
         writer.next_float(obj.scale_y)
         writer.next_float(obj.scale_z)
+
+        writer.next_int32(1 if obj.placed_in_level else 0)
+
+    def _read_component_header(self, reader: BufferReader) -> BpComponentHeader:
+        type_path = reader.next_string()
+        root = reader.next_string()
+        instance_name = reader.next_string()
+        parent_actor_name = reader.next_string()
+
+        return BpComponentHeader(0,  # type_flag
+                                 type_path, root, instance_name, parent_actor_name)
+
+    def _write_component_header(self, obj: BpComponentHeader, writer: BufferWriter):
+        writer.next_int32(obj.type_flag)
+        writer.next_string(obj.type_path)
+        writer.next_string(obj.root)
+        writer.next_string(obj.instance_name)
+        writer.next_string(obj.parent_actor_name)
+
+    def read(self, reader: BufferReader) -> BpHeader:
+        type_flag = reader.next_int32()
+
+        if type_flag == 0:
+            return self._read_component_header(reader)
+
+        if type_flag == 1:
+            return self._read_actor_header(reader)
+
+        raise Exception(f"Unknown header type: {type_flag}")
+
+    def write(self, obj: BpHeader, writer: BufferWriter):
+        if isinstance(obj, BpActorHeader):
+            self._write_actor_header(obj, writer)
+
+        else:
+            raise Exception(f"Unknown header implementation: {obj}")
+
+
+class BpObjectReferenceReader(BpReader):
+    def read(self, reader: BufferReader) -> BpObjectReference:
+        level_name = reader.next_string()
+        path_name = reader.next_string()
+
+        return BpObjectReference(level_name, path_name)
+
+    def write(self, obj: BpObjectReference, writer: BufferWriter):
+        writer.next_string(obj.level_name)
+        writer.next_string(obj.path_name)
 
 
 class BpPropertyReader(BpReader):
@@ -130,7 +181,7 @@ class BpPropertyReader(BpReader):
         struct_type = reader.next_string()
         data = {}
         is_typed_data = True
-        
+
         # skip padding
         reader.skip_forward(8 + 8 + 1)  # offset is 2 longs, 1 byte
 
@@ -277,31 +328,39 @@ class BpBodyReader(BpReader):
         objects = []
 
         object_count = reader.next_int32()
+        print(f"Object count: {object_count}")
 
         for i in range(object_count):
             header = BpHeaderReader().read(reader)
-            obj = BpObject(header, "", "", [])
+            obj = BpObject(header, "", "", [], [])
             objects.append(obj)
 
         uk1 = reader.next_int32()
-        uk2 = reader.next_int32()
 
-        for i in range(object_count):
-            print(f"Reading object {i}")
-            reader.print_offset_hex()
+        print(f"UK1: {uk1}")
 
+        entity_count = reader.next_int32()
+
+        for i in range(entity_count):
             obj = objects[i]
 
+            print(f"Reading object {i+1}/{entity_count} (type: {obj.header.instance_name})")
+            reader.print_offset_hex()
+
             size = reader.next_int32()
+            print(f"Size: {size}")
 
             obj.parent_root = reader.next_string()
             obj.parent_object_name = reader.next_string()
 
-            reader.skip_forward(4)  # skip 4 null bytes
-            reader.print_offset_hex()
+            reference_count = reader.next_int32()
+
+            for j in range(reference_count):
+                obj.references = BpObjectReferenceReader().read(reader)
 
             obj.properties = BpPropertiesReader().read(reader)
-            reader.skip_forward(4)
+            uk3 = reader.next_int32()
+            print(f"UK3: {uk3}")
 
             objects[i] = obj
 

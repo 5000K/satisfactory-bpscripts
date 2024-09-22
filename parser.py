@@ -5,7 +5,7 @@ from BufferReader import BufferReader
 from reader import BpBodyReader
 
 # open file
-path = r"Z:\Docs\Satisfactory\Blueprint Analysis\foundation_concrete+normal.sbp"
+path = r"Z:\Docs\Satisfactory\Blueprint Analysis\colorfulmix.sbp"
 
 # open file
 with open(path, "rb") as f:
@@ -104,10 +104,11 @@ assert actual_body_size <= len(decompressed), f"Invalid body size: {actual_body_
 
 unknown_field = body_reader.next_int32()
 
+print("\nBody Data ============================================================================")
+
 # read objects
 objects = BpBodyReader().read(body_reader)
 
-print("\nBody Data ============================================================================")
 
 # dump to json
 for obj in objects:

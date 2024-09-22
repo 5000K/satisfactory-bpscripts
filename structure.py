@@ -5,9 +5,14 @@ from dataclasses import dataclass
 
 @dataclass
 class BpHeader:
+    type_flag: int
     type_path: str
     root: str
     instance_name: str
+
+
+@dataclass
+class BpActorHeader(BpHeader):
     need_transform: bool
 
     rot_x: float
@@ -24,6 +29,17 @@ class BpHeader:
     scale_z: float
 
     placed_in_level: str
+
+
+@dataclass
+class BpComponentHeader(BpHeader):
+    parent_actor_name: str
+
+
+@dataclass
+class BpObjectReference:
+    level_name: str
+    path_name: str
 
 
 @dataclass
@@ -62,6 +78,7 @@ class BpObject:
     header: BpHeader
     parent_root: str
     parent_object_name: str
+    references: list[BpObjectReference]
     properties: list[BpProperty or None]
 
     def dump_to_json(self):
